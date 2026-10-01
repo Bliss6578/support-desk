@@ -16,7 +16,7 @@ The server-memory ticket store is authoritative. A process-global array avoids r
 
 The URL is the persistence source for filters, making filtered views refresh-safe and shareable. The page derives Redux filters from query parameters in one direction; UI changes update the URL, avoiding two competing sources and synchronization loops.
 
-Polling runs every five seconds: responsive enough for a support queue without creating needless load. The server lazily generates external activity after seven seconds, alternating new arrivals and remote claim/status changes, so polling observes activity every 5-10 seconds without a server timer that leaks during reloads. Pending updates accumulate by ID and remain behind an “N updated tickets — Show” banner until requested, so rows do not jump. Detail polling refreshes assignment and status; review and header counts also poll. Intervals are cleaned up. Production would use versioned events or WebSockets.
+Polling runs every five seconds: responsive enough for a support queue without creating needless load. The server lazily generates external activity after seven seconds, alternating new arrivals and remote claim/status changes, so polling observes activity every 5-10 seconds without a server timer that leaks during reloads. Pending updates accumulate by internal ID and remain behind a centered “N new tickets — Show” banner until requested, so rows do not jump while an agent is reading. Detail polling refreshes assignment and status; review and header counts also poll. Intervals are cleaned up. Production would use versioned events or WebSockets.
 
 The requirement to “show all tickets on one page” conflicts with API pagination and a roughly 5,000-row performance target. The API retains pagination while the UI incrementally appends 25-row cursor pages on one scrolling screen. The cursor is the last internal ID, so new top insertions cannot cause offset skips or duplicates; the client also deduplicates IDs. `TicketRow` and `Deadline` are memoized; countdown state is isolated per deadline.
 
@@ -33,7 +33,9 @@ The requirement to “show all tickets on one page” conflicts with API paginat
 - **T-2009:** `agent-99` displays as “Unknown agent.”
 - **T-2010:** legacy `closed` displays but offers no transition action because it is outside the supported state machine.
 - **T-2011:** malicious AI summary markup renders as text.
-- **T-2012:** unsupported `maybe` is normalized at the fixture trust boundary into manual review with an explicit reason instead of being trusted.
+- **T-2012:** the unsupported raw value `maybe` is preserved so malformed upstream data remains visible. The server includes unsupported decision values in the manual-review queue, and the UI labels them as invalid rather than silently normalizing them.
+
+The review UI labels every AI field explicitly and calculates invalid-output state from the same supported category, priority, decision, and enterprise-priority rules used by server validation. Invalid recommendations cannot use **Accept AI**; the agent must provide a valid replacement and reason through **Change Decision**. Successful reviews are removed from the local queue immediately.
 
 ## Simulation and failures
 
@@ -41,6 +43,6 @@ Latency/general failures/claim conflicts are reusable and enabled by default; `S
 
 ## Scope
 
-Implemented after review: bulk claim/status actions with `Promise.allSettled` and failed-item rollback, cursor-safe incremental loading, a server `notFound()` boundary, automatic external activity, complete review-queue retrieval, and measured Lighthouse artifacts. Still skipped: a production database, authentication/authorization, a real AI provider call, end-to-end tests in CI, Git history, and deployment. Header counts use filtered server totals and five-second polling.
+Implemented after review: bulk claim/status actions with `Promise.allSettled` and failed-item rollback, cursor-safe incremental loading, a server `notFound()` boundary, automatic external activity, complete review-queue retrieval, responsive mobile ticket cards, resettable URL-backed filters, clear skeleton/error/empty states, and measured Lighthouse artifacts. Header counts use filtered server totals and five-second polling. The repository has Git history and a Vercel deployment; this final local quality pass does not claim that its unpushed working-tree changes are already live. Still skipped: a production database, authentication/authorization, a real AI provider call, and end-to-end browser tests in CI.
 
 With one additional week: add PostgreSQL and optimistic concurrency/version columns, authentication and role checks, virtualization for very large loaded lists, WebSocket events, Playwright accessibility/security scenarios in CI, observability, rate limiting, and a validated real triage-provider adapter.

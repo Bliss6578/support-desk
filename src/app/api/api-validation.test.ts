@@ -48,4 +48,12 @@ describe("Route Handler validation cannot be bypassed", () => {
       expect(ids).not.toContain(firstPage.items[1].id);
     }finally{const index=tickets.findIndex(ticket=>ticket.id===inserted.id);if(index>=0)tickets.splice(index,1)}
   });
+
+  it("preserves an unsupported AI decision and routes it to manual review", async () => {
+    const response = await listTickets(new NextRequest("http://localhost/api/tickets?triage_decision=manual_review&pageSize=1000"));
+    const page = await response.json();
+    const malformed = page.items.find((ticket: { id: string }) => ticket.id === "case-2012");
+    expect(malformed).toBeDefined();
+    expect(malformed.triage_decision).toBe("maybe");
+  });
 });

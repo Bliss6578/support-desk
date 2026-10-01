@@ -55,5 +55,5 @@ Reviewed against all nine pages of `Frontend-Internship.pdf` on 2026-10-01. Stat
 
 ## Supplied fixtures
 
-- **PASS** - T-2001 through T-2012 are included with the assignment values, except T-2012's invalid `maybe` is normalized to manual review with an explanatory reason at the trust boundary.
+- **PASS** - T-2001 through T-2012 are included with the assignment values. T-2012's invalid raw `maybe` decision is preserved, identified as unsupported, and routed into manual review without silently normalizing the source value.
 - **PASS** - Duplicate external IDs use separate internal IDs; XSS/prompt-like strings remain data; unsafe URLs are blocked; invalid AI output is reviewable; long/empty/Unicode/future/unknown-agent/legacy-status cases degrade safely.
