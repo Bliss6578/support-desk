@@ -39,7 +39,7 @@ The review UI labels every AI field explicitly and calculates invalid-output sta
 
 ## Simulation and failures
 
-Latency/general failures/claim conflicts are reusable and enabled by default; `SIMULATE_API_FAILURES=false` disables them for a predictable demo, and `NODE_ENV=test` always disables them. Claiming saves only the prior assignment, applies one optimistic change, blocks repeat clicks with both a ref and disabled control, and rolls back only that assignment on failure. HTTP 409 receives specific messaging. The claim route re-checks ownership after simulated latency to avoid a time-of-check/time-of-use race. Status and re-triage actions also use synchronous refs to block rapid duplicate requests.
+Latency/general failures/claim conflicts remain available as an explicit QA mode through `SIMULATE_API_FAILURES=true`; they are off by default and always disabled under `NODE_ENV=test`, so production does not fail randomly. Claiming saves only the prior assignment, applies one optimistic change, blocks repeat clicks with both a ref and disabled control, and rolls back only that assignment on failure. HTTP 409 receives specific messaging. The claim route re-checks ownership after simulated latency to avoid a time-of-check/time-of-use race. Status and re-triage actions also use synchronous refs to block rapid duplicate requests.
 
 ## Scope
 
