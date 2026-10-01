@@ -2,6 +2,9 @@
 
 A polished support-ticket operations dashboard built for a frontend engineering assignment. Agents can search and filter a deterministic 5,000-ticket data set, claim tickets, move them through a guarded status workflow, inspect SLA deadlines, and review AI triage decisions.
 
+**Live deployment:** [support-desk-ten-liard.vercel.app](https://support-desk-ten-liard.vercel.app/tickets)  
+The current Vercel account has Deployment Protection enabled, so visitors may be asked to authenticate until that project setting is disabled.
+
 ## Features
 
 - Server-filtered, cursor-safe incremental ticket list with 300 ms debounced search and shareable URL filters
