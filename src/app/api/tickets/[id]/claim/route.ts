@@ -1,0 +1,5 @@
+import { NextResponse } from "next/server";
+import { findTicket, touch } from "@/lib/store-server";
+import { isAgentId } from "@/lib/validation";
+import { simulate } from "@/lib/simulation";
+export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){ const {id}=await params,t=findTicket(id); if(!t)return NextResponse.json({error:"Ticket not found"},{status:404}); const body=await req.json().catch(()=>({})); if(!isAgentId(body.agentId))return NextResponse.json({error:"Invalid agent"},{status:400}); if(t.assigned_to&&t.assigned_to!==body.agentId)return NextResponse.json({error:"This ticket was claimed by another agent."},{status:409}); try{await simulate("claim");}catch(e){return NextResponse.json({error:e instanceof Error&&e.message==="SIMULATED_CONFLICT"?"This ticket was claimed by another agent.":"Temporary failure"},{status:e instanceof Error&&e.message==="SIMULATED_CONFLICT"?409:503});} if(t.assigned_to&&t.assigned_to!==body.agentId)return NextResponse.json({error:"This ticket was claimed by another agent."},{status:409}); t.assigned_to=body.agentId; return NextResponse.json(touch(t)); }

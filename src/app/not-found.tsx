@@ -1,0 +1,1 @@
+import Link from"next/link";export default function NotFound(){return <div className="container" style={{paddingTop:80,textAlign:"center"}}><h1>Ticket not found</h1><p>The ticket may have been removed or the link is incorrect.</p><Link className="btn" href="/tickets">Back to tickets</Link></div>}
