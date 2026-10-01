@@ -1,12 +1,305 @@
 "use client";
-import{useCallback,useEffect,useRef,useState}from"react";import{useParams}from"next/navigation";import Link from"next/link";import{Sparkles}from"lucide-react";import{AGENTS,type Ticket}from"@/lib/types";import{useAppSelector}from"@/store/hooks";import{Deadline}from"@/components/Deadline";import{formatDate,humanize}from"@/components/TicketRow";import{nextStatus}from"@/lib/validation";import{safeAttachmentUrl}from"@/lib/security";import{notifyCounts}from"@/components/Header";
-const actions={in_progress:"Start Progress",resolved:"Resolve",open:"Reopen"} as const;
-export default function Detail(){const{id}=useParams<{id:string}>(),agent=useAppSelector(s=>s.agent.current),[ticket,setTicket]=useState<Ticket|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(""),[notice,setNotice]=useState("");const claimLock=useRef(false),statusLock=useRef(false),retriageLock=useRef(false);
- const load=useCallback(async()=>{setError("");try{const r=await fetch(`/api/tickets/${id}`);if(r.status===404){setError("NOT_FOUND");return}if(!r.ok)throw new Error();setTicket(await r.json())}catch{setError("Could not load this ticket.")}},[id]);useEffect(()=>{load();const timer=setInterval(load,5000);return()=>clearInterval(timer)},[load]);
- const claim=async()=>{if(!ticket||claimLock.current)return;claimLock.current=true;setBusy("claim");setNotice("");const previous=ticket.assigned_to;setTicket({...ticket,assigned_to:agent});try{const r=await fetch(`/api/tickets/${id}/claim`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({agentId:agent})});if(!r.ok){const b=await r.json();throw Object.assign(new Error(b.error),{status:r.status})}setTicket(await r.json());notifyCounts()}catch(e){setTicket(t=>t?{...t,assigned_to:previous}:t);setNotice((e as {status?:number}).status===409?"This ticket was claimed by another agent.":"Claim failed. Please try again.");notifyCounts()}finally{claimLock.current=false;setBusy("")}};
- const changeStatus=async()=>{if(!ticket||statusLock.current)return;const status=nextStatus(ticket.status);if(!status)return;statusLock.current=true;setBusy("status");setNotice("");try{const r=await fetch(`/api/tickets/${id}/status`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({status})});if(!r.ok)throw new Error();setTicket(await r.json());notifyCounts()}catch{setNotice("Status update failed.")}finally{statusLock.current=false;setBusy("")}};
- const retriage=async()=>{if(retriageLock.current)return;retriageLock.current=true;setBusy("retriage");setNotice("");try{const r=await fetch(`/api/tickets/${id}/retriage`,{method:"POST"});const body=await r.json();if(!r.ok)throw new Error(body.error);setTicket(body);setNotice("AI triage refreshed and sent for review.");notifyCounts()}catch(e){setNotice(e instanceof Error?e.message:"Re-triage failed.")}finally{retriageLock.current=false;setBusy("")}};
- if(error==="NOT_FOUND")return <div className="container" style={{paddingTop:60}}><h1>Ticket not found</h1><Link href="/tickets">Back to tickets</Link></div>;if(error)return <Screen text={error} action={<button className="btn" onClick={load}>Retry</button>}/>;if(!ticket)return <Screen text="Loading ticket…"/>;
- const url=safeAttachmentUrl(ticket.attachment_url),agentName=ticket.assigned_to?(AGENTS[ticket.assigned_to as keyof typeof AGENTS]??"Unknown agent"):"Unassigned",next=nextStatus(ticket.status),aiPriority=ticket.ai_priority??ticket.priority;
- return <div className="container detail-page"><Link className="back-link" href="/tickets">← Tickets</Link><header className="detail-heading"><div><span className="external-id">{ticket.external_id}</span><h1>{ticket.subject||"No subject"}</h1><p>{humanize(ticket.customer_plan)} · {humanize(ticket.category)} · Created {formatDate(ticket.created_at)}</p></div><span className={`badge priority-${ticket.priority.toLowerCase()}`}>{ticket.priority}</span></header>{notice&&<p className="inline-notice" role="alert">{notice}</p>}<div className="detail-layout"><div className="detail-main"><section className="card detail-section"><p className="section-label">Customer message</p><p className="message-copy">{ticket.body||"No message provided."}</p><div className="section-divider"/><p className="section-label">Attachment</p>{url?<a className="safe-link" href={url} target="_blank" rel="noopener noreferrer">Open safe attachment ↗</a>:<p className="muted">{ticket.attachment_url?"Unsafe or invalid attachment URL blocked.":"No attachment."}</p>}</section><section className="card ai-panel"><div className="ai-panel-title"><Sparkles size={16}/><span>AI assessment</span></div><p className="ai-summary">{ticket.summary||"No summary available."}</p><dl className="info-grid"><Info label="Category" value={ticket.category}/><Info label="Suggested priority" value={aiPriority}/><Info label="Final priority" value={ticket.priority}/><Info label="Decision" value={ticket.triage_decision}/></dl>{ticket.ai_priority&&ticket.ai_priority!==ticket.priority&&<p className="adjustment"><strong>Adjustment reason:</strong> {ticket.review_reason||"Final priority was adjusted during review."}</p>}</section></div><aside className="card detail-sidebar"><p className="section-label">Ticket information</p><div className="sidebar-sla"><span>SLA</span><Deadline createdAt={ticket.created_at} priority={ticket.priority}/></div><dl className="sidebar-info"><Info label="Status" value={ticket.status}/><Info label="Assigned agent" value={agentName}/><Info label="Customer" value={ticket.customer_id}/></dl><div className="detail-actions">{!ticket.assigned_to&&<button className="btn" disabled={busy==="claim"} onClick={claim}>{busy==="claim"?"Claiming…":"Claim ticket"}</button>}{next&&<button className="btn secondary" disabled={busy==="status"} onClick={changeStatus}>{busy==="status"?"Updating…":actions[next]}</button>}<button className="btn secondary" disabled={busy==="retriage"} onClick={retriage}>{busy==="retriage"?"Re-running…":"Re-run AI"}</button></div>{!next&&<p className="muted">Legacy status cannot be changed here.</p>}</aside></div></div>}
-function Info({label,value}:{label:string;value:string}){return <div><dt>{label}</dt><dd>{humanize(value)}</dd></div>}function Screen({text,action}:{text:string;action?:React.ReactNode}){return <div className="container state-panel"><strong>{text}</strong>{action}</div>}
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { Sparkles } from "lucide-react";
+import { AGENTS, type Ticket } from "@/lib/types";
+import { useAppSelector } from "@/store/hooks";
+import { Deadline } from "@/components/Deadline";
+import { formatDate, humanize } from "@/components/TicketRow";
+import { nextStatus } from "@/lib/validation";
+import { safeAttachmentUrl } from "@/lib/security";
+import { notifyCounts } from "@/components/Header";
+const actions = {
+  in_progress: "Start Progress",
+  resolved: "Resolve",
+  open: "Reopen",
+} as const;
+export default function Detail() {
+  const { id } = useParams<{ id: string }>(),
+    agent = useAppSelector((s) => s.agent.current),
+    [ticket, setTicket] = useState<Ticket | null>(null),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(""),
+    [notice, setNotice] = useState("");
+  const claimLock = useRef(false),
+    statusLock = useRef(false),
+    retriageLock = useRef(false),
+    since = useRef(new Date().toISOString());
+  const load = useCallback(async () => {
+    setError("");
+    try {
+      const r = await fetch(`/api/tickets/${id}`);
+      if (r.status === 404) {
+        setError("NOT_FOUND");
+        return;
+      }
+      if (!r.ok) throw new Error();
+      setTicket(await r.json());
+    } catch {
+      setError("Could not load this ticket.");
+    }
+  }, [id]);
+  useEffect(() => {
+    load();
+  }, [load]);
+  useEffect(() => {
+    const poll = async () => {
+      if (claimLock.current || statusLock.current || retriageLock.current)
+        return;
+      try {
+        const response = await fetch(
+          `/api/tickets/updates?since=${encodeURIComponent(since.current)}`,
+        );
+        if (!response.ok) return;
+        const update = (await response.json()) as { items: Ticket[] };
+        since.current = new Date().toISOString();
+        const changed = update.items.find((item) => item.id === id);
+        if (changed) {
+          setTicket(changed);
+          notifyCounts();
+        }
+      } catch {}
+    };
+    const timer = setInterval(poll, 5000);
+    return () => clearInterval(timer);
+  }, [id]);
+  const claim = async () => {
+    if (!ticket || claimLock.current) return;
+    claimLock.current = true;
+    setBusy("claim");
+    setNotice("");
+    const previous = ticket.assigned_to;
+    setTicket({ ...ticket, assigned_to: agent });
+    try {
+      const r = await fetch(`/api/tickets/${id}/claim`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ agentId: agent }),
+      });
+      if (!r.ok) {
+        const b = await r.json();
+        throw Object.assign(new Error(b.error), { status: r.status });
+      }
+      setTicket(await r.json());
+      notifyCounts();
+    } catch (e) {
+      setTicket((t) => (t ? { ...t, assigned_to: previous } : t));
+      setNotice(
+        (e as { status?: number }).status === 409
+          ? "This ticket was claimed by another agent."
+          : "Claim failed. Please try again.",
+      );
+      notifyCounts();
+    } finally {
+      claimLock.current = false;
+      setBusy("");
+    }
+  };
+  const changeStatus = async () => {
+    if (!ticket || statusLock.current) return;
+    const status = nextStatus(ticket.status);
+    if (!status) return;
+    statusLock.current = true;
+    setBusy("status");
+    setNotice("");
+    try {
+      const r = await fetch(`/api/tickets/${id}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!r.ok) throw new Error();
+      setTicket(await r.json());
+      notifyCounts();
+    } catch {
+      setNotice("Status update failed.");
+    } finally {
+      statusLock.current = false;
+      setBusy("");
+    }
+  };
+  const retriage = async () => {
+    if (retriageLock.current) return;
+    retriageLock.current = true;
+    setBusy("retriage");
+    setNotice("");
+    try {
+      const r = await fetch(`/api/tickets/${id}/retriage`, { method: "POST" });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.error);
+      setTicket(body);
+      setNotice("AI triage refreshed and sent for review.");
+      notifyCounts();
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Re-triage failed.");
+    } finally {
+      retriageLock.current = false;
+      setBusy("");
+    }
+  };
+  if (error === "NOT_FOUND")
+    return (
+      <div className="container" style={{ paddingTop: 60 }}>
+        <h1>Ticket not found</h1>
+        <Link href="/tickets">Back to tickets</Link>
+      </div>
+    );
+  if (error)
+    return (
+      <Screen
+        text={error}
+        action={
+          <button className="btn" onClick={load}>
+            Retry
+          </button>
+        }
+      />
+    );
+  if (!ticket) return <Screen text="Loading ticket…" />;
+  const url = safeAttachmentUrl(ticket.attachment_url),
+    agentName = ticket.assigned_to
+      ? (AGENTS[ticket.assigned_to as keyof typeof AGENTS] ?? "Unknown agent")
+      : "Unassigned",
+    next = nextStatus(ticket.status),
+    aiPriority = ticket.ai_priority ?? ticket.priority;
+  return (
+    <div className="container detail-page">
+      <Link className="back-link" href="/tickets">
+        ← Tickets
+      </Link>
+      <header className="detail-heading">
+        <div>
+          <span className="external-id">{ticket.external_id}</span>
+          <h1>{ticket.subject || "No subject"}</h1>
+          <p>
+            {humanize(ticket.customer_plan)} · {humanize(ticket.category)} ·
+            Created {formatDate(ticket.created_at)}
+          </p>
+        </div>
+        <span className={`badge priority-${ticket.priority.toLowerCase()}`}>
+          {ticket.priority}
+        </span>
+      </header>
+      {notice && (
+        <p className="inline-notice" role="alert">
+          {notice}
+        </p>
+      )}
+      <div className="detail-layout">
+        <div className="detail-main">
+          <section className="card detail-section">
+            <p className="section-label">Customer message</p>
+            <p className="message-copy">
+              {ticket.body || "No message provided."}
+            </p>
+            <div className="section-divider" />
+            <p className="section-label">Attachment</p>
+            {url ? (
+              <a
+                className="safe-link"
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open safe attachment ↗
+              </a>
+            ) : (
+              <p className="muted">
+                {ticket.attachment_url
+                  ? "Unsafe or invalid attachment URL blocked."
+                  : "No attachment."}
+              </p>
+            )}
+          </section>
+          <section className="card ai-panel">
+            <div className="ai-panel-title">
+              <Sparkles size={16} />
+              <span>AI assessment</span>
+            </div>
+            <p className="ai-summary">
+              {ticket.summary || "No summary available."}
+            </p>
+            <dl className="info-grid">
+              <Info label="Category" value={ticket.category} />
+              <Info label="Suggested priority" value={aiPriority} />
+              <Info label="Final priority" value={ticket.priority} />
+              <Info label="Decision" value={ticket.triage_decision} />
+              {ticket.review_reason && (
+                <Info label="Review reason" value={ticket.review_reason} />
+              )}
+            </dl>
+            {ticket.ai_priority && ticket.ai_priority !== ticket.priority && (
+              <p className="adjustment">
+                <strong>Adjustment reason:</strong>{" "}
+                {ticket.review_reason ||
+                  "Final priority was adjusted during review."}
+              </p>
+            )}
+          </section>
+        </div>
+        <aside className="card detail-sidebar">
+          <p className="section-label">Ticket information</p>
+          <div className="sidebar-sla">
+            <span>SLA</span>
+            <Deadline
+              createdAt={ticket.created_at}
+              priority={ticket.priority}
+            />
+          </div>
+          <dl className="sidebar-info">
+            <Info label="Status" value={ticket.status} />
+            <Info label="Assigned agent" value={agentName} />
+            <Info label="Customer" value={ticket.customer_id} />
+          </dl>
+          <div className="detail-actions">
+            {!ticket.assigned_to && (
+              <button
+                className="btn"
+                disabled={busy === "claim"}
+                onClick={claim}
+              >
+                {busy === "claim" ? "Claiming…" : "Claim ticket"}
+              </button>
+            )}
+            {next && (
+              <button
+                className="btn secondary"
+                disabled={busy === "status"}
+                onClick={changeStatus}
+              >
+                {busy === "status" ? "Updating…" : actions[next]}
+              </button>
+            )}
+            <button
+              className="btn secondary"
+              disabled={busy === "retriage"}
+              onClick={retriage}
+            >
+              {busy === "retriage" ? "Re-running…" : "Re-run AI"}
+            </button>
+          </div>
+          {!next && (
+            <p className="muted">Legacy status cannot be changed here.</p>
+          )}
+        </aside>
+      </div>
+    </div>
+  );
+}
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{humanize(value)}</dd>
+    </div>
+  );
+}
+function Screen({ text, action }: { text: string; action?: React.ReactNode }) {
+  return (
+    <div className="container state-panel">
+      <strong>{text}</strong>
+      {action}
+    </div>
+  );
+}
